@@ -140,7 +140,11 @@ fancyRpartPlot(modfit_tree$finalModel)
 
 
 
-This worked, but it also doesn't really look like the classification tree does a great job and I think I could do a lot better. I don't want to check this on the test set yet because I think I can do better by using a random forests model building method on the training set. Thanks to this [kaggle forum post](https://www.kaggle.com/forums/f/15/kaggle-forum/t/7951/r-party-package-cforest-memory-problem/44392) with help for running the random forest method on a computer with low RAM since R kept crashing in my original implementation. 
+This worked, but it also doesn't really look like the classification tree does a great job and I think I could do a lot better. I don't want to check this on the test set yet because I think I can do better by using a random forests model building method on the training set. 
+
+## Random Forests model
+
+Thanks to this [kaggle forum post](https://www.kaggle.com/forums/f/15/kaggle-forum/t/7951/r-party-package-cforest-memory-problem/44392) with help for running the random forest method on a computer with low RAM since R kept crashing in my original implementation. 
 
 
 ```{r rand_forest, results="hide"}
