@@ -6,7 +6,9 @@ output: html_document
 ---
 
 ```{r load_libraries, message=FALSE}
-library(caret); library(ggplot2); library(reshape2)
+knitr::opts_chunk$set(fig.width=14, fig.height=10, 
+                      echo=FALSE, warning=FALSE, message=FALSE)
+library(caret); library(ggplot2); library(reshape2);library(gridExtra); library(dplyr)
 ```
 
 
@@ -40,41 +42,17 @@ nzv <- nearZeroVar(fullData,saveMetrics=TRUE)
 ```
 
 
-
-One of the first things to note is that there are many dummy variables in these data. Several columns do not have measurements for each observation, but are rather summary statistics for one sliding window. The paper suggests that a "sliding window" of time is anywhere between 0.5 and 2.5 seconds of activity.
-
-In the validation data which we would like to predict are just random draws of one observation at a particular time point. That being the case, we can easily omit many of the summary variables in this dataset as they are not useful for this particular prediction problem, and also seem to be mislabeled in some cases (e.g. the summary statistics are in the wrong columns). The inappropriate structure of these variables is borne out by the near zero variances of these variables: 
-
-```{r nzv}
-nzv
-```
-
-
-
-First we can remove all rows which contain summary statistics and not observational data. We can also filter out all columns which serve only to present summary data. We can also remove the "X" variable, which is just the row number and the "new_window" variable which was only a marker for summary variable rows:
-
-
-
-```{r clean_data, message=FALSE}
-library(dplyr)
-fullData <- filter(fullData, new_window == "no")
-fullData <- Filter(function(x)!all(is.na(x)), fullData)
-fullData <- select(fullData, -X, -new_window)
-
-# Also remove all the same columns from the test data set:
-validation <- Filter(function(x)!all(is.na(x)), validation)
-validation <- select(validation, -X, -new_window)
-
-#Have we done a good job?
-nsv <- nearZeroVar(fullData, saveMetrics=TRUE)
-nsv
-```
-
-
 #Exploring the data
 
 
 **Note: I originally split this set into training and testing prior to exploring the data and removing inappropriate variables, but for the purposes of this report I show that analysis first, then split the data after all of the offending columns are removed**
+
+One of the first things to note is that there are many dummy variables in these data. Several columns do not have measurements for each observation, but are rather summary statistics for one sliding window. The paper suggests that a "sliding window" of time is anywhere between 0.5 and 2.5 seconds of activity.
+
+In the validation data which we would like to predict are just random draws of one observation at a particular time point. That being the case, we can easily omit many of the summary variables in this dataset as they are not useful for this particular prediction problem, and also seem to be mislabeled in some cases (e.g. the summary statistics are in the wrong columns). The inappropriate structure of these variables is borne out by the near zero variances of these variables (not shown).
+
+We can remove all rows which contain summary statistics and not observational data. We can also filter out all columns which serve only to present summary data. We can also remove the "X" variable, which is just the row number and the "new_window" variable which was only a marker for summary variable rows.
+
 
 While there are a lot of continuous and integer variables in these data, there is an interesting pattern that we can glean from the factor variables: most notably from the `user_name`, `classe`, and `cvtd_timestamp` variables.
 
@@ -93,15 +71,31 @@ grid.arrange(a, b, ncol=2)
 
 
 
-
 This relationship is an artifact of the study design which would allow us to predict the validation data with great accuracy, but will fail if we are trying to accurately predict new data given only accelerometer measurements. Therefore it is necessary to further exclude all of the timestamp and username data if we want to accurately predict the exercise class based solely on accelerometer measurements.
+
+
+```{r exclude_vars, message=FALSE}
+fullData <- filter(fullData, new_window == "no")
+fullData <- Filter(function(x)!all(is.na(x)), fullData)
+fullData <- select(fullData, -X, -new_window, -user_name, -cvtd_timestamp, 
+                   -raw_timestamp_part_1, -raw_timestamp_part_2, -num_window)
+
+# Also remove all the same columns from the test data set:
+validation <- Filter(function(x)!all(is.na(x)), validation)
+validation <- select(validation, -X, -new_window, -user_name, -cvtd_timestamp, 
+                   -raw_timestamp_part_1, -raw_timestamp_part_2, -num_window)
+
+#Have we done a good job?
+nzv <- nearZeroVar(fullData, saveMetrics=TRUE)
+nzv
+```
 
 
 ### Dealing with multicollinearity
 
 Now I want to examine these data for multicollinearity. I want to trim variables that are highly correlated
 
-```{r correlation}
+```{r multicollinearity}
 cor.matrix <- cor(fullData[sapply(fullData, is.numeric)])
 c <- melt(cor.matrix)
 qplot(x=Var1, y=Var2, data=c, fill=value, geom="tile") +
@@ -112,44 +106,32 @@ qplot(x=Var1, y=Var2, data=c, fill=value, geom="tile") +
 
 It does seem that some of the variables are highly correlated. I'll pare down the dataset by removing variable that are highly correlated (over 0.9):
 
-```{r multicollinearity}
+```{r rm_corr}
 c <- findCorrelation(cor.matrix, cutoff = .90)
 fullData <- fullData[,-c]
 validation <- validation[,-c]
 ```
 
 
-```{r exclude_time_user}
-fullData <- filter(fullData, new_window == "no")
-fullData <- Filter(function(x)!all(is.na(x)), fullData)
-fullData <- select(fullData, -X, -new_window, -user_name, -cvtd_timestamp, 
-                   -raw_timestamp_part_1, -raw_timestamp_part_2, -num_window)
-
-# Also remove all the same columns from the test data set:
-validation <- Filter(function(x)!all(is.na(x)), validation)
-validation <- select(validation, -X, -new_window, -user_name, -cvtd_timestamp, 
-                   -raw_timestamp_part_1, -raw_timestamp_part_2, -num_window)
-```
-
 Looking through the data using `hist` from the `Hmisc` package on the full data set, some of the variables seem normally distributed while others are clearly multimodal. This is just to show that there are some variables in which it's unwise to assume normality. Here are just a few examples:
 
 ```{r histograms, message=FALSE}
 library(gridBase)
 a <- qplot(total_accel_forearm, data = fullData)
-b <- qplot(accel_forearm_z, data = fullData)
+b <- qplot(yaw_forearm, data = fullData)
 c <- qplot(total_accel_belt, data = fullData)
-d <- qplot(accel_belt_z, data = fullData)
+d <- qplot(yaw_belt, data=fullData)
 grid.arrange(a, b, c, d, ncol=2)
 ```
 
 
-# Cross validation set
+# Cross Validation
 
 While the data is split online into a "training" and "testing" set already, the "testing" set is really for the purposes of validation for the assignment. I will split the full data (what is labeled as the "training" data online) into training and testing sets in order to continue these analyses. I am splitting into 70% training and 30% testing.
 
 
 
-```{r naive_model, echo=FALSE}
+```{r cross_val, echo=FALSE}
 inTrain <- createDataPartition(y=fullData$classe, p=0.7, list=FALSE)
 training <- fullData[inTrain, ]; testing <- fullData[-inTrain, ]
 ```
@@ -166,9 +148,16 @@ Here is a classification tree:
 
 ```{r class_tree, message=FALSE}
 library(rattle)
-modfit_1 <- train(classe ~ ., method="rpart", data=training)
-fancyRpartPlot(modfit_1$finalModel)
+modfit_tree <- train(classe ~ ., method="rpart", data=training)
+fancyRpartPlot(modfit_tree$finalModel)
 ```
 
 
+
+This doesn't look too bad, but it also doesn't really look great and I think I could do a lot better. I don't want to check this on the test set yet because I think I can do better just by using a random forests model on the training set.
+
+
+```{r rand_forest}
+#modfit_rf <- train(classe ~ ., data=training, method="rf", prox=TRUE)
+```
 
